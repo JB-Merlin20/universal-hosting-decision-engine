@@ -102,3 +102,7 @@ app/                       ← Next.js application
 ```
 
 See [CLAUDE.md](CLAUDE.md) for detailed architecture docs, [ENGINE.md](ENGINE.md) for orchestration rules, and [AGENTS.md](AGENTS.md) for agent responsibilities.
+
+## Author
+
+Made by Johnbert O.
