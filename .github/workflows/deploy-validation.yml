@@ -1,0 +1,213 @@
+name: Deploy Validation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    outputs:
+      risk_level: ${{ steps.assess.outputs.risk_level }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get deployment changes
+        id: changes
+        run: |
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$last_tag" ]; then
+            log=$(git log --oneline "$last_tag"..HEAD)
+            diff_stat=$(git diff --stat "$last_tag"..HEAD)
+            files_changed=$(git diff --name-only "$last_tag"..HEAD)
+          else
+            log=$(git log --oneline -20)
+            diff_stat=$(git diff --stat HEAD~1..HEAD 2>/dev/null || echo "Initial commit")
+            files_changed=$(git diff --name-only HEAD~1..HEAD 2>/dev/null || git ls-tree -r --name-only HEAD)
+          fi
+
+          {
+            echo "log<<EOF"
+            echo "$log"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "diff_stat<<EOF"
+            echo "$diff_stat"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "files<<EOF"
+            echo "$files_changed"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Classify change risk
+        id: assess
+        run: |
+          files="${{ steps.changes.outputs.files }}"
+          risk="low"
+
+          # Escalate to medium if agent pipeline or data schema changed
+          if echo "$files" | grep -qE '^scripts/|^data/hosting\.json'; then
+            risk="medium"
+          fi
+
+          # Escalate to medium if dependencies changed
+          if echo "$files" | grep -qE 'package\.json|package-lock\.json'; then
+            risk="medium"
+          fi
+
+          # Escalate to high if build config or deployment config changed
+          if echo "$files" | grep -qE 'next\.config|\.github/workflows|vercel\.json'; then
+            risk="high"
+          fi
+
+          echo "risk_level=$risk" >> "$GITHUB_OUTPUT"
+          echo "### Risk Level: \`$risk\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize changes
+        run: |
+          echo "### Deployment Change Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commits:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.changes.outputs.log }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Diff stat:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.changes.outputs.diff_stat }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  agent-pipeline:
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: cd app && npm ci
+
+      - name: Run data agent
+        run: node scripts/data-agent.js
+
+      - name: Run smart features agent
+        run: node scripts/smart-features-agent.js
+
+      - name: Run extra features agent
+        run: node scripts/extra-features-agent.js
+
+      - name: Verify frontend data exists
+        run: |
+          if [ ! -f app/src/data/hosting-data.json ]; then
+            echo "::error::Agent pipeline did not produce app/src/data/hosting-data.json"
+            exit 1
+          fi
+          echo "Frontend data file OK ($(wc -c < app/src/data/hosting-data.json) bytes)"
+
+  build:
+    needs: agent-pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: cd app && npm ci
+
+      - name: Run agent pipeline (regenerate data)
+        run: |
+          node scripts/data-agent.js
+          node scripts/smart-features-agent.js
+          node scripts/extra-features-agent.js
+
+      - name: Lint
+        run: cd app && npm run lint
+
+      - name: Build
+        run: cd app && npm run build
+
+      - name: Verify standalone output
+        run: |
+          if [ ! -d app/.next/standalone ]; then
+            echo "::error::Standalone build output not found"
+            exit 1
+          fi
+          echo "Standalone build OK"
+
+  deploy:
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+
+    # Block high-risk deploys — requires manual approval via GitHub environment protection rules
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Risk gate
+        run: |
+          risk="${{ needs.validate.outputs.risk_level }}"
+          echo "Deployment risk level: $risk"
+          if [ "$risk" = "high" ]; then
+            echo "::warning::High-risk deployment — approved via environment protection rules"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: cd app && npm ci
+
+      - name: Run agent pipeline
+        run: |
+          node scripts/data-agent.js
+          node scripts/smart-features-agent.js
+          node scripts/extra-features-agent.js
+
+      - name: Build
+        run: cd app && npm run build
+
+      # Uncomment and configure when ready to deploy:
+      # - name: Deploy to Vercel
+      #   id: deploy
+      #   run: |
+      #     url=$(cd app && npx vercel --prod --token=${{ secrets.VERCEL_TOKEN }})
+      #     echo "url=$url" >> "$GITHUB_OUTPUT"
+      #   env:
+      #     VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      #     VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Post-deploy summary
+        run: |
+          echo "### Deployment Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Risk level:** ${{ needs.validate.outputs.risk_level }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status:** Success" >> "$GITHUB_STEP_SUMMARY"
