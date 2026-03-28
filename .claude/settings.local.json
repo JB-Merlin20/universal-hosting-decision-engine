@@ -31,7 +31,13 @@
       "Bash(PYTHONIOENCODING=utf-8 \"$PYTHON\" \"C:/Users/My Pc/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"dark mode light mode toggle theme contrast\" --domain ux -n 5)",
       "Bash(node -e \":*)",
       "Bash(node -e \"const p = require\\(''./package.json''\\); Object.keys\\(p.dependencies\\).forEach\\(k => console.log\\(k\\)\\)\")",
-      "Bash(\"/c/Users/My Pc/AppData/Local/Programs/Python/Python311/python.exe\" generate_mermaid.py)"
+      "Bash(\"/c/Users/My Pc/AppData/Local/Programs/Python/Python311/python.exe\" generate_mermaid.py)",
+      "Bash(du -sh app/node_modules/@*)",
+      "Bash(while read:*)",
+      "Bash(do echo:*)",
+      "Bash(done)",
+      "Bash(du -sh app/node_modules/*)",
+      "Bash(find . -type f -name *.css)"
     ]
   }
 }

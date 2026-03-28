@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "agents": "node ../scripts/run-agents.js"
+    "agents": "node ../scripts/run-agents.js",
+    "build:prod": "next build && node -e \"require('fs').rmSync('.next/cache',{recursive:true,force:true})\" && npm prune --omit=dev"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",
