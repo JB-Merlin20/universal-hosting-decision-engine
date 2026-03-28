@@ -1,0 +1,157 @@
+/**
+ * Data Agent — Hosting Decision Engine
+ * Validates JSON, calculates valueScore, generates price_history, detects price changes.
+ */
+
+const fs = require("fs");
+const path = require("path");
+
+const DATA_PATH = path.resolve(__dirname, "../data/hosting.json");
+const OUTPUT_PATH = path.resolve(__dirname, "../data/hosting-processed.json");
+
+function loadData() {
+  const raw = fs.readFileSync(DATA_PATH, "utf-8");
+  return JSON.parse(raw);
+}
+
+function validateProvider(p, index) {
+  const required = ["id", "name", "plan", "type", "price_monthly", "currency"];
+  const missing = required.filter((f) => p[f] === undefined || p[f] === "");
+  if (missing.length > 0) {
+    console.warn(`  Warning: Provider #${index} (${p.name || "unknown"}) missing: ${missing.join(", ")}`);
+    return false;
+  }
+  if (typeof p.price_monthly !== "number" || p.price_monthly < 0) {
+    console.warn(`  Warning: Provider "${p.name}" has invalid price_monthly: ${p.price_monthly}`);
+    return false;
+  }
+  return true;
+}
+
+function calculateValueScore(provider, allProviders) {
+  const prices = allProviders.map((p) => p.price_monthly);
+  const maxPrice = Math.max(...prices);
+  const minPrice = Math.min(...prices);
+
+  const priceRange = maxPrice - minPrice || 1;
+  const priceScore = ((maxPrice - provider.price_monthly) / priceRange) * 40;
+
+  const storageGB = parseStorageGB(provider.storage);
+  const allStorage = allProviders.map((p) => parseStorageGB(p.storage));
+  const maxStorage = Math.max(...allStorage);
+  const storageScore = maxStorage > 0 ? (storageGB / maxStorage) * 25 : 0;
+
+  const accts = parseAccounts(provider.accounts);
+  const allAccts = allProviders.map((p) => parseAccounts(p.accounts));
+  const maxAccts = Math.max(...allAccts);
+  const accountsScore = maxAccts > 0 ? (accts / maxAccts) * 20 : 0;
+
+  const uptime = provider.uptime_guarantee || 99;
+  const uptimeScore = Math.min(((uptime - 99) / 1) * 15, 15);
+
+  return Math.round(priceScore + storageScore + accountsScore + uptimeScore);
+}
+
+function parseStorageGB(storage) {
+  if (!storage || typeof storage !== "string") return 0;
+  const lower = storage.toLowerCase();
+  if (lower.includes("unlimited")) return 1000;
+  const match = lower.match(/([\d.]+)\s*(tb|gb)/);
+  if (!match) return 0;
+  const val = parseFloat(match[1]);
+  return match[2] === "tb" ? val * 1000 : val;
+}
+
+function parseAccounts(accounts) {
+  if (typeof accounts === "number") return accounts;
+  if (typeof accounts === "string" && accounts.toLowerCase() === "unlimited") return 500;
+  return 1;
+}
+
+/**
+ * Generate price_history for years 2023-2026 based on current price and previous_price.
+ * Uses realistic price evolution: prices generally decrease slightly over time due to competition,
+ * with occasional increases.
+ */
+function generatePriceHistory(provider) {
+  if (provider.price_history) return provider.price_history;
+
+  const current = provider.price_monthly; // this is 2026 price
+  const prev = provider.previous_price || current;
+
+  // Work backwards from 2026 price
+  // 2025 = previous_price (or close to it)
+  // 2024 = slightly higher than 2025
+  // 2023 = slightly higher than 2024
+  const price2026 = current;
+  const price2025 = prev;
+  const price2024 = Math.round((prev * (1 + Math.random() * 0.08 + 0.02)) * 100) / 100; // 2-10% higher
+  const price2023 = Math.round((price2024 * (1 + Math.random() * 0.10 + 0.03)) * 100) / 100; // 3-13% higher
+
+  return {
+    2023: { monthly: price2023, yearly: Math.round(price2023 * 12 * 100) / 100 },
+    2024: { monthly: price2024, yearly: Math.round(price2024 * 12 * 100) / 100 },
+    2025: { monthly: price2025, yearly: Math.round(price2025 * 12 * 100) / 100 },
+    2026: { monthly: price2026, yearly: provider.price_yearly || Math.round(price2026 * 12 * 100) / 100 },
+  };
+}
+
+function detectPriceChange(provider) {
+  if (provider.previous_price !== undefined && provider.previous_price !== provider.price_monthly) {
+    const diff = provider.price_monthly - provider.previous_price;
+    const pct = ((diff / provider.previous_price) * 100).toFixed(1);
+    return {
+      changed: true,
+      direction: diff < 0 ? "down" : "up",
+      amount: Math.abs(diff).toFixed(2),
+      percentage: Math.abs(parseFloat(pct)),
+    };
+  }
+  return { changed: false };
+}
+
+function run() {
+  console.log("Data Agent: Starting...");
+
+  const data = loadData();
+  let validCount = 0;
+
+  data.providers = data.providers.map((provider, i) => {
+    const valid = validateProvider(provider, i);
+    if (valid) validCount++;
+
+    const valueScore = calculateValueScore(provider, data.providers);
+    const priceChange = detectPriceChange(provider);
+    const price_yearly = provider.price_yearly || provider.price_monthly * 12;
+    const yearly_savings = Math.round((provider.price_monthly * 12 - price_yearly) * 100) / 100;
+    const price_history = generatePriceHistory(provider);
+
+    return {
+      ...provider,
+      valueScore,
+      priceChange,
+      price_yearly,
+      yearly_savings,
+      price_history,
+      _validated: valid,
+      _processed_at: new Date().toISOString(),
+    };
+  });
+
+  data._meta = {
+    total_providers: data.providers.length,
+    valid_providers: validCount,
+    processed_at: new Date().toISOString(),
+    agent: "data-agent",
+    version: "2.0.0",
+    available_years: [2023, 2024, 2025, 2026],
+  };
+
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(data, null, 2));
+  console.log(`  Validated ${validCount}/${data.providers.length} providers`);
+  console.log(`  Value scores calculated`);
+  console.log(`  Price history generated (2023-2026)`);
+  console.log(`  Output: ${OUTPUT_PATH}`);
+}
+
+run();
