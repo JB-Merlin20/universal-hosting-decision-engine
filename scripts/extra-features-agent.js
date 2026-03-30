@@ -19,6 +19,14 @@ function loadData() {
   return JSON.parse(raw);
 }
 
+function csvCell(val) {
+  const s = String(val ?? "");
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
 function exportCSV(providers) {
   const headers = [
     "Rank",
@@ -27,6 +35,8 @@ function exportCSV(providers) {
     "Type",
     "Monthly Price (USD)",
     "Yearly Price (USD)",
+    "Renewal Monthly (USD)",
+    "Renewal Yearly (USD)",
     "Yearly Savings",
     "Storage",
     "Bandwidth",
@@ -37,28 +47,32 @@ function exportCSV(providers) {
     "Support",
     "Value Score",
     "Badges",
+    "Price Source",
     "Notes",
     "Last Updated",
   ];
 
   const rows = providers.map((p) => [
     p.rank,
-    p.name,
-    p.plan,
-    p.type,
+    csvCell(p.name),
+    csvCell(p.plan),
+    csvCell(p.type),
     p.price_monthly,
     p.price_yearly,
+    p.price_renewal_monthly || "",
+    p.price_renewal_yearly || "",
     p.yearly_savings || 0,
-    p.storage,
-    p.bandwidth,
-    p.accounts,
+    csvCell(p.storage),
+    csvCell(p.bandwidth),
+    csvCell(String(p.accounts)),
     p.free_domain ? "Yes" : "No",
     p.free_ssl ? "Yes" : "No",
     `${p.uptime_guarantee}%`,
-    p.support,
+    csvCell(p.support),
     p.valueScore,
-    (p.badges || []).join("; "),
-    `"${(p.notes || "").replace(/"/g, '""')}"`,
+    csvCell((p.badges || []).join("; ")),
+    p.price_fetch_method || "manual",
+    csvCell(p.notes || ""),
     p.last_updated,
   ]);
 

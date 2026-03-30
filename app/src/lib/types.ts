@@ -21,6 +21,8 @@ export interface HostingProvider {
   type: string;
   price_monthly: number;
   price_yearly: number;
+  price_renewal_monthly?: number;
+  price_renewal_yearly?: number;
   currency: string;
   storage: string;
   bandwidth: string;
@@ -35,8 +37,11 @@ export interface HostingProvider {
   recommended: boolean;
   notes: string;
   last_updated: string;
+  price_fetch_method?: "auto" | "manual";
+  price_fetched_at?: string;
   valueScore: number;
   priceChange: PriceChange;
+  renewal_premium?: { monthly_delta: number; percentage: number } | null;
   yearly_savings: number;
   badges: string[];
   rank: number;
