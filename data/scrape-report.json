@@ -1,0 +1,21 @@
+{
+  "run_at": "2026-03-30T16:03:46.831Z",
+  "total": 0,
+  "succeeded": 0,
+  "failed": 1,
+  "skipped": 0,
+  "providers": [
+    {
+      "scraper": "bluehost",
+      "status": "failed",
+      "error": "Timeout after 30000ms",
+      "ids": []
+    }
+  ],
+  "summary": {
+    "updated": 0,
+    "unchanged": 0,
+    "failed": 101,
+    "total_providers": 101
+  }
+}

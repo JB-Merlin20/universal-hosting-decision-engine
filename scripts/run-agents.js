@@ -14,7 +14,10 @@ const run = (label, command) => {
 };
 
 // 🔁 AGENT PIPELINE FLOW
-// Data → Smart Features → Extra → (Frontend auto updates) → Deploy
+// Price Scraper → Data → Smart Features → Extra → (Frontend auto updates) → Deploy
+
+// 0. Price Scraper Agent (fetches live prices — failures are non-blocking)
+run("Price Scraper Agent", "node scripts/price-scraper-agent.js");
 
 // 1. Data Agent
 run("Data Agent", "node scripts/data-agent.js");

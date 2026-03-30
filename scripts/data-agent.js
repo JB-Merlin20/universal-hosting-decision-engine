@@ -69,31 +69,43 @@ function parseAccounts(accounts) {
 }
 
 /**
- * Generate price_history for years 2023-2026 based on current price and previous_price.
- * Uses realistic price evolution: prices generally decrease slightly over time due to competition,
- * with occasional increases.
+ * Generate price_history based on real data only.
+ * Only includes years where we have actual price data (previous_price → 2025, current → 2026).
+ * No synthetic/random data is generated.
  */
 function generatePriceHistory(provider) {
   if (provider.price_history) return provider.price_history;
 
-  const current = provider.price_monthly; // this is 2026 price
-  const prev = provider.previous_price || current;
+  const current = provider.price_monthly;
+  const history = {};
 
-  // Work backwards from 2026 price
-  // 2025 = previous_price (or close to it)
-  // 2024 = slightly higher than 2025
-  // 2023 = slightly higher than 2024
-  const price2026 = current;
-  const price2025 = prev;
-  const price2024 = Math.round((prev * (1 + Math.random() * 0.08 + 0.02)) * 100) / 100; // 2-10% higher
-  const price2023 = Math.round((price2024 * (1 + Math.random() * 0.10 + 0.03)) * 100) / 100; // 3-13% higher
+  // Only include 2025 if we have a real previous_price that differs from current
+  if (provider.previous_price !== undefined && provider.previous_price !== current) {
+    history["2025"] = {
+      monthly: provider.previous_price,
+      yearly: Math.round(provider.previous_price * 12 * 100) / 100,
+    };
+  }
 
-  return {
-    2023: { monthly: price2023, yearly: Math.round(price2023 * 12 * 100) / 100 },
-    2024: { monthly: price2024, yearly: Math.round(price2024 * 12 * 100) / 100 },
-    2025: { monthly: price2025, yearly: Math.round(price2025 * 12 * 100) / 100 },
-    2026: { monthly: price2026, yearly: provider.price_yearly || Math.round(price2026 * 12 * 100) / 100 },
+  // 2026 = current price (always present)
+  history["2026"] = {
+    monthly: current,
+    yearly: provider.price_yearly || Math.round(current * 12 * 100) / 100,
   };
+
+  return history;
+}
+
+/**
+ * Compute renewal premium if renewal pricing data is available.
+ */
+function computeRenewalPremium(provider) {
+  if (provider.price_renewal_monthly && provider.price_renewal_monthly !== provider.price_monthly) {
+    const delta = Math.round((provider.price_renewal_monthly - provider.price_monthly) * 100) / 100;
+    const pct = Math.round(((provider.price_renewal_monthly - provider.price_monthly) / provider.price_monthly) * 100);
+    return { monthly_delta: delta, percentage: pct };
+  }
+  return null;
 }
 
 function detectPriceChange(provider) {
@@ -125,6 +137,7 @@ function run() {
     const price_yearly = provider.price_yearly || provider.price_monthly * 12;
     const yearly_savings = Math.round((provider.price_monthly * 12 - price_yearly) * 100) / 100;
     const price_history = generatePriceHistory(provider);
+    const renewal_premium = computeRenewalPremium(provider);
 
     return {
       ...provider,
@@ -133,6 +146,7 @@ function run() {
       price_yearly,
       yearly_savings,
       price_history,
+      renewal_premium,
       _validated: valid,
       _processed_at: new Date().toISOString(),
     };
@@ -144,13 +158,13 @@ function run() {
     processed_at: new Date().toISOString(),
     agent: "data-agent",
     version: "2.0.0",
-    available_years: [2023, 2024, 2025, 2026],
+    available_years: [2025, 2026],
   };
 
   fs.writeFileSync(OUTPUT_PATH, JSON.stringify(data, null, 2));
   console.log(`  Validated ${validCount}/${data.providers.length} providers`);
   console.log(`  Value scores calculated`);
-  console.log(`  Price history generated (2023-2026)`);
+  console.log(`  Price history generated (2025-2026, real data only)`);
   console.log(`  Output: ${OUTPUT_PATH}`);
 }
 
