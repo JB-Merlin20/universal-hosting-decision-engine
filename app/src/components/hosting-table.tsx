@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { GroupedProvider, HostingProvider, BillingCycle, SortField, SortDirection } from "@/lib/types";
+import { ProviderLogo } from "@/components/provider-logo";
 
 interface HostingTableProps {
   groups: GroupedProvider[];
@@ -342,6 +343,7 @@ export function HostingTable({ groups, billingCycle, selectedYears, sortField, s
                     <td className="px-4 py-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
+                          <ProviderLogo name={group.name} url={plan.url} />
                           <span className="font-semibold text-foreground">{group.name}</span>
                           {group.hasRecommended && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />}
                         </div>
