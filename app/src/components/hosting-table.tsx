@@ -3,19 +3,21 @@
 import {
   ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Check, X, Star,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  TrendingUp, TrendingDown, Minus,
+  AlertTriangle,
 } from "lucide-react";
 import { useState, useMemo, Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { GroupedProvider, HostingProvider, BillingCycle, SortField, SortDirection } from "@/lib/types";
+import { calculateYearlyCosts } from "@/lib/types";
 import { ProviderLogo } from "@/components/provider-logo";
+
+const PROJECTION_YEARS = [2026, 2027, 2028, 2029] as const;
 
 interface HostingTableProps {
   groups: GroupedProvider[];
   billingCycle: BillingCycle;
-  selectedYears: number[];
   sortField: SortField;
   sortDirection: SortDirection;
   onSort: (field: SortField) => void;
@@ -48,66 +50,55 @@ function ValueBar({ score }: { score: number }) {
   );
 }
 
-function getYearPrice(provider: HostingProvider, year: number, cycle: BillingCycle): number {
-  const yp = provider.price_history?.[String(year)];
-  if (yp) return cycle === "monthly" ? yp.monthly : yp.yearly;
-  return cycle === "monthly" ? provider.price_monthly : provider.price_yearly;
-}
+/** Price display with intro/renewal breakdown and tooltip */
+function PriceCell({ plan, billingCycle }: { plan: HostingProvider; billingCycle: BillingCycle }) {
+  const introPrice = billingCycle === "monthly" ? plan.price_monthly : plan.price_yearly;
+  const renewalPrice = billingCycle === "monthly"
+    ? (plan.price_renewal_monthly ?? plan.price_monthly)
+    : (plan.price_renewal_yearly ?? plan.price_yearly);
+  const hasRenewal = renewalPrice !== introPrice;
+  const introDuration = plan.intro_duration_months || 12;
+  const renewalRatio = hasRenewal ? renewalPrice / introPrice : 1;
+  const suffix = billingCycle === "monthly" ? "/mo" : "/yr";
 
-/** YoY delta badge between two years */
-function YoYDelta({ provider, yearA, yearB, cycle }: { provider: HostingProvider; yearA: number; yearB: number; cycle: BillingCycle }) {
-  const priceA = getYearPrice(provider, yearA, cycle);
-  const priceB = getYearPrice(provider, yearB, cycle);
-  if (priceA === priceB) return <Minus className="h-3 w-3 text-muted-foreground/40 mx-auto" />;
-  const diff = priceB - priceA;
-  const pct = Math.abs((diff / priceA) * 100).toFixed(0);
-  if (diff < 0) {
-    return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-        <TrendingDown className="h-3 w-3" />
-        {pct}%
-      </span>
-    );
-  }
+  const tooltipText = hasRenewal
+    ? `Intro price lasts ${introDuration} months, then renews at $${renewalPrice.toFixed(2)}${suffix}`
+    : `Price stays at $${introPrice.toFixed(2)}${suffix} — no renewal increase`;
+
   return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-      <TrendingUp className="h-3 w-3" />
-      {pct}%
-    </span>
+    <div className="space-y-1 group/price relative">
+      <div className="flex items-baseline gap-0.5" title={tooltipText}>
+        <span className="text-base font-bold tabular-nums text-foreground">
+          ${introPrice.toFixed(2)}
+        </span>
+        <span className="text-[11px] text-muted-foreground">{suffix}</span>
+      </div>
+      {hasRenewal && (
+        <>
+          <p className="text-[10px] text-muted-foreground leading-tight" title={tooltipText}>
+            renews at <span className="font-semibold text-foreground/80">${renewalPrice.toFixed(2)}{suffix}</span>
+            {" "}after {introDuration}mo
+          </p>
+          {renewalRatio > 2 && (
+            <div className="flex items-center gap-1 mt-0.5">
+              <AlertTriangle className="h-3 w-3 text-red-500" />
+              <span className="text-[10px] font-semibold text-red-600 dark:text-red-400">
+                {Math.round((renewalRatio - 1) * 100)}% increase after intro
+              </span>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
-function MiniSparkline({ provider, selectedYears }: { provider: HostingProvider; selectedYears: number[] }) {
-  const history = provider.price_history;
-  if (!history) return null;
-  const allYears = [2023, 2024, 2025, 2026];
-  const prices = allYears.map((y) => history[String(y)]?.monthly).filter((p): p is number => p != null);
-  if (prices.length < 2) return null;
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || 1;
-  const h = 20;
-  const w = 48;
-  const points = prices.map((p, i) => `${(i / (prices.length - 1)) * w},${h - ((p - min) / range) * h}`).join(" ");
+/** Expanded row with features and details */
+function ExpandedRow({ provider, billingCycle }: { provider: HostingProvider; billingCycle: BillingCycle }) {
+  const costs = calculateYearlyCosts(provider);
+  const total4yr = PROJECTION_YEARS.reduce((s, y) => s + costs[y], 0);
+  const avgMonthly = total4yr / 48;
 
-  return (
-    <svg width={w} height={h} className="shrink-0">
-      <polyline fill="none" stroke="currentColor" strokeWidth="1.5" className="text-primary/30" points={points} />
-      {allYears.map((y, i) => {
-        if (!selectedYears.includes(y)) return null;
-        const p = history[String(y)]?.monthly;
-        if (p == null) return null;
-        const cx = (i / (allYears.length - 1)) * w;
-        const cy = h - ((p - min) / range) * h;
-        return <circle key={y} cx={cx} cy={cy} r="2.5" className="fill-primary" />;
-      })}
-    </svg>
-  );
-}
-
-/** Expanded row with multi-year comparison table */
-function ExpandedRow({ provider, billingCycle, selectedYears }: { provider: HostingProvider; billingCycle: BillingCycle; selectedYears: number[] }) {
-  const allYears = [2023, 2024, 2025, 2026];
   return (
     <tr className="border-b border-border/30">
       <td colSpan={100} className="px-5 py-5 bg-muted/30">
@@ -145,43 +136,28 @@ function ExpandedRow({ provider, billingCycle, selectedYears }: { provider: Host
             <p className="text-foreground/70 text-xs leading-relaxed">{provider.notes}</p>
           </div>
 
-          {/* Right: Year-by-year comparison table */}
+          {/* Right: 4-year cost breakdown */}
           <div>
             <p className="font-semibold text-[11px] uppercase tracking-wider text-muted-foreground mb-3">
-              Price Comparison Across Years
+              4-Year Cost Projection
             </p>
             <div className="rounded-lg border border-border/50 overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/50 border-b border-border/50">
                     <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Year</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Monthly</th>
-                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Yearly</th>
-                    <th className="text-center px-3 py-2 font-semibold text-muted-foreground">YoY</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Annual Cost</th>
+                    <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Monthly Equiv.</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {allYears.map((y, i) => {
-                    const yp = provider.price_history?.[String(y)];
-                    if (!yp) return null;
-                    const isSelected = selectedYears.includes(y);
-                    const prevYp = i > 0 ? provider.price_history?.[String(allYears[i - 1])] : null;
-                    let yoyEl: React.ReactNode = <Minus className="h-3 w-3 text-muted-foreground/30 mx-auto" />;
-                    if (prevYp) {
-                      const diff = yp.monthly - prevYp.monthly;
-                      const pct = Math.abs((diff / prevYp.monthly) * 100).toFixed(1);
-                      if (diff < 0) yoyEl = <span className="text-emerald-600 dark:text-emerald-400 font-semibold">-{pct}%</span>;
-                      else if (diff > 0) yoyEl = <span className="text-amber-600 dark:text-amber-400 font-semibold">+{pct}%</span>;
-                    }
+                  {PROJECTION_YEARS.map((y) => {
+                    const cost = costs[y];
                     return (
-                      <tr key={y} className={cn(
-                        "border-b border-border/30 last:border-0 transition-colors",
-                        isSelected ? "bg-primary/10" : "hover:bg-muted/30"
-                      )}>
-                        <td className={cn("px-3 py-2 font-semibold tabular-nums", isSelected ? "text-primary" : "text-foreground")}>{y}</td>
-                        <td className={cn("px-3 py-2 text-right tabular-nums", isSelected ? "text-primary font-semibold" : "text-foreground")}>${yp.monthly.toFixed(2)}</td>
-                        <td className={cn("px-3 py-2 text-right tabular-nums", isSelected ? "text-primary font-semibold" : "text-foreground")}>${yp.yearly.toFixed(2)}</td>
-                        <td className="px-3 py-2 text-center">{yoyEl}</td>
+                      <tr key={y} className="border-b border-border/30 last:border-0">
+                        <td className="px-3 py-2 font-semibold tabular-nums text-foreground">{y}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-foreground">${cost.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">${(cost / 12).toFixed(2)}/mo</td>
                       </tr>
                     );
                   })}
@@ -189,31 +165,13 @@ function ExpandedRow({ provider, billingCycle, selectedYears }: { provider: Host
               </table>
             </div>
 
-            {/* Total change across selected years */}
-            {selectedYears.length >= 2 && (() => {
-              const sorted = [...selectedYears].sort();
-              const first = sorted[0];
-              const last = sorted[sorted.length - 1];
-              const firstP = provider.price_history?.[String(first)]?.monthly;
-              const lastP = provider.price_history?.[String(last)]?.monthly;
-              if (firstP == null || lastP == null) return null;
-              const totalDiff = lastP - firstP;
-              const totalPct = ((totalDiff / firstP) * 100).toFixed(1);
-              return (
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 border border-border/50 px-3 py-2">
-                  <span className="text-[11px] text-muted-foreground font-medium">{first} vs {last}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground tabular-nums">${firstP.toFixed(2)} &rarr; ${lastP.toFixed(2)}</span>
-                    <span className={cn(
-                      "text-xs font-bold tabular-nums",
-                      totalDiff < 0 ? "text-emerald-600 dark:text-emerald-400" : totalDiff > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
-                    )}>
-                      {totalDiff < 0 ? "" : "+"}{totalPct}%
-                    </span>
-                  </div>
-                </div>
-              );
-            })()}
+            <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 border border-border/50 px-3 py-2">
+              <span className="text-[11px] text-muted-foreground font-medium">Total (4 years)</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold tabular-nums text-foreground">${total4yr.toFixed(2)}</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">avg ${avgMonthly.toFixed(2)}/mo</span>
+              </div>
+            </div>
           </div>
         </div>
       </td>
@@ -221,14 +179,11 @@ function ExpandedRow({ provider, billingCycle, selectedYears }: { provider: Host
   );
 }
 
-export function HostingTable({ groups, billingCycle, selectedYears, sortField, sortDirection, onSort }: HostingTableProps) {
+export function HostingTable({ groups, billingCycle, sortField, sortDirection, onSort }: HostingTableProps) {
   const [expandedName, setExpandedName] = useState<string | null>(null);
   const [selectedPlans, setSelectedPlans] = useState<Record<string, number>>({});
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
-
-  const sortedYears = useMemo(() => [...selectedYears].sort(), [selectedYears]);
-  const isComparing = sortedYears.length > 1;
 
   const totalPages = Math.ceil(groups.length / pageSize);
   const paginated = useMemo(() => groups.slice(page * pageSize, (page + 1) * pageSize), [groups, page, pageSize]);
@@ -248,8 +203,34 @@ export function HostingTable({ groups, billingCycle, selectedYears, sortField, s
     return group.plans[idx] || group.plans[0];
   }
 
-  // Dynamic columns based on how many years selected
-  const priceColSpan = isComparing ? sortedYears.length * 2 - 1 : 1; // years + delta arrows between them
+  // Pre-compute yearly costs for all visible plans to find cheapest per year
+  const cheapestPerYear = useMemo(() => {
+    const mins: Record<number, number> = {};
+    for (const y of PROJECTION_YEARS) mins[y] = Infinity;
+
+    for (const group of groups) {
+      const plan = getActivePlan(group);
+      const costs = calculateYearlyCosts(plan);
+      for (const y of PROJECTION_YEARS) {
+        if (costs[y] < mins[y]) mins[y] = costs[y];
+      }
+    }
+    return mins;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, selectedPlans]);
+
+  // Also find cheapest total 4yr
+  const cheapestTotal = useMemo(() => {
+    let min = Infinity;
+    for (const group of groups) {
+      const plan = getActivePlan(group);
+      const costs = calculateYearlyCosts(plan);
+      const total = PROJECTION_YEARS.reduce((s, y) => s + costs[y], 0);
+      if (total < min) min = total;
+    }
+    return min;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, selectedPlans]);
 
   return (
     <div className="rounded-xl border border-border/50 bg-card overflow-hidden shadow-sm">
@@ -269,20 +250,24 @@ export function HostingTable({ groups, billingCycle, selectedYears, sortField, s
               </th>
               <th className="text-left px-4 py-3 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Plan</th>
 
-              {/* Dynamic price columns */}
-              {isComparing ? (
-                <th colSpan={priceColSpan} className="text-center px-4 py-2 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">
-                  <button onClick={() => onSort("price")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors duration-150 cursor-pointer">
-                    Price Comparison <SortIcon field="price" currentField={sortField} direction={sortDirection} />
-                  </button>
+              {/* Price column */}
+              <th className="text-left px-4 py-3 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">
+                <button onClick={() => onSort("price")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors duration-150 cursor-pointer">
+                  Price <SortIcon field="price" currentField={sortField} direction={sortDirection} />
+                </button>
+              </th>
+
+              {/* Year projection columns */}
+              {PROJECTION_YEARS.map((y) => (
+                <th key={y} className="text-center px-2 py-3 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground tabular-nums">
+                  {y}
                 </th>
-              ) : (
-                <th className="text-left px-4 py-3 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">
-                  <button onClick={() => onSort("price")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors duration-150 cursor-pointer">
-                    Price ({sortedYears[0]}) <SortIcon field="price" currentField={sortField} direction={sortDirection} />
-                  </button>
-                </th>
-              )}
+              ))}
+
+              {/* Total 4yr column */}
+              <th className="text-center px-2 py-3 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">
+                Total (4yr)
+              </th>
 
               <th className="text-left px-4 py-3 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">
                 <button onClick={() => onSort("storage")} className="inline-flex items-center gap-1 hover:text-foreground transition-colors duration-150 cursor-pointer">
@@ -296,28 +281,16 @@ export function HostingTable({ groups, billingCycle, selectedYears, sortField, s
               </th>
               <th className="text-left px-4 py-3 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">Action</th>
             </tr>
-
-            {/* Sub-header for year labels when comparing */}
-            {isComparing && (
-              <tr className="border-b border-border/30 bg-muted/30">
-                <th colSpan={3} />
-                {sortedYears.map((y, i) => (
-                  <Fragment key={y}>
-                    <th className="text-center px-2 py-1.5 text-[10px] font-bold text-primary tabular-nums">{y}</th>
-                    {i < sortedYears.length - 1 && (
-                      <th className="text-center px-1 py-1.5 text-[9px] text-muted-foreground/60 font-normal">vs</th>
-                    )}
-                  </Fragment>
-                ))}
-                <th colSpan={3} />
-              </tr>
-            )}
           </thead>
           <tbody>
             {paginated.map((group) => {
               const plan = getActivePlan(group);
               const isExpanded = expandedName === group.name;
               const planIdx = selectedPlans[group.name] ?? 0;
+              const costs = calculateYearlyCosts(plan);
+              const total4yr = PROJECTION_YEARS.reduce((s, y) => s + costs[y], 0);
+              const avgMonthly = total4yr / 48;
+              const introAnnual = plan.price_yearly ?? plan.price_monthly * 12;
 
               return (
                 <Fragment key={group.name}>
@@ -376,35 +349,59 @@ export function HostingTable({ groups, billingCycle, selectedYears, sortField, s
                       )}
                     </td>
 
-                    {/* Price column(s) */}
-                    {isComparing ? (
-                      // Multi-year: price cells with delta arrows between
-                      sortedYears.map((y, i) => (
-                        <Fragment key={y}>
-                          <td className="px-2 py-3 text-center">
-                            <div className="text-xs font-bold tabular-nums text-foreground">
-                              ${getYearPrice(plan, y, billingCycle).toFixed(2)}
+                    {/* Price with intro/renewal breakdown */}
+                    <td className="px-4 py-3">
+                      <PriceCell plan={plan} billingCycle={billingCycle} />
+                    </td>
+
+                    {/* Year projection columns (always total annual cost) */}
+                    {PROJECTION_YEARS.map((y) => {
+                      const cost = costs[y];
+                      const isCheapest = cost === cheapestPerYear[y] && cost < Infinity;
+                      // Highlight in red if this year's cost is significantly higher than year 1
+                      const isExpensive = cost > introAnnual * 1.3;
+
+                      return (
+                        <td key={y} className={cn(
+                          "px-2 py-3 text-center",
+                          isCheapest && "bg-emerald-50/60 dark:bg-emerald-950/20",
+                          !isCheapest && isExpensive && "bg-red-50/50 dark:bg-red-950/15"
+                        )}>
+                          <span className={cn(
+                            "text-xs font-bold tabular-nums",
+                            isCheapest ? "text-emerald-700 dark:text-emerald-400" : isExpensive ? "text-red-700 dark:text-red-400" : "text-foreground"
+                          )}>
+                            ${cost.toFixed(0)}
+                          </span>
+                          {isCheapest && (
+                            <div className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">
+                              cheapest
                             </div>
-                          </td>
-                          {i < sortedYears.length - 1 && (
-                            <td className="px-1 py-3 text-center">
-                              <YoYDelta provider={plan} yearA={sortedYears[i]} yearB={sortedYears[i + 1]} cycle={billingCycle} />
-                            </td>
                           )}
-                        </Fragment>
-                      ))
-                    ) : (
-                      // Single year
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div>
-                            <span className="text-base font-bold tabular-nums text-foreground">${getYearPrice(plan, sortedYears[0], billingCycle).toFixed(2)}</span>
-                            <span className="text-[11px] text-muted-foreground ml-0.5">{billingCycle === "monthly" ? "/mo" : "/yr"}</span>
-                          </div>
-                          <MiniSparkline provider={plan} selectedYears={sortedYears} />
+                        </td>
+                      );
+                    })}
+
+                    {/* Total 4yr + avg monthly */}
+                    <td className={cn(
+                      "px-2 py-3 text-center",
+                      total4yr === cheapestTotal && total4yr < Infinity && "bg-emerald-50/60 dark:bg-emerald-950/20"
+                    )}>
+                      <div className={cn(
+                        "text-xs font-bold tabular-nums",
+                        total4yr === cheapestTotal && total4yr < Infinity ? "text-emerald-700 dark:text-emerald-400" : "text-foreground"
+                      )}>
+                        ${total4yr.toFixed(0)}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
+                        avg ${avgMonthly.toFixed(2)}/mo
+                      </div>
+                      {total4yr === cheapestTotal && total4yr < Infinity && (
+                        <div className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">
+                          cheapest
                         </div>
-                      </td>
-                    )}
+                      )}
+                    </td>
 
                     {/* Storage */}
                     <td className="px-4 py-3 text-foreground/70 text-xs">{plan.storage}</td>
@@ -425,7 +422,7 @@ export function HostingTable({ groups, billingCycle, selectedYears, sortField, s
                       </div>
                     </td>
                   </tr>
-                  {isExpanded && <ExpandedRow provider={plan} billingCycle={billingCycle} selectedYears={sortedYears} />}
+                  {isExpanded && <ExpandedRow provider={plan} billingCycle={billingCycle} />}
                 </Fragment>
               );
             })}

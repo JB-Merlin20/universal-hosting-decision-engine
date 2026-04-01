@@ -312,7 +312,8 @@
       "notes": "Premium support and speed at entry level.",
       "last_updated": "2026-03-31",
       "price_renewal_monthly": 17.99,
-      "price_renewal_yearly": 215.88
+      "price_renewal_yearly": 215.88,
+      "intro_duration_months": 12
     },
     {
       "id": "siteground-growbig",
@@ -344,7 +345,8 @@
       "notes": "Best value SiteGround plan with staging and unlimited sites.",
       "last_updated": "2026-03-31",
       "price_renewal_monthly": 29.99,
-      "price_renewal_yearly": 359.88
+      "price_renewal_yearly": 359.88,
+      "intro_duration_months": 12
     },
     {
       "id": "siteground-gogeek",
@@ -376,7 +378,8 @@
       "notes": "Top-tier shared with Git, white-label, and priority resources.",
       "last_updated": "2026-03-31",
       "price_renewal_monthly": 44.99,
-      "price_renewal_yearly": 539.88
+      "price_renewal_yearly": 539.88,
+      "intro_duration_months": 12
     },
     {
       "id": "a2hosting-startup",
@@ -1086,7 +1089,8 @@
       "notes": "SPanel-powered shared hosting.",
       "last_updated": "2026-03-31",
       "price_renewal_monthly": 11.95,
-      "price_renewal_yearly": 143.4
+      "price_renewal_yearly": 143.4,
+      "intro_duration_months": 12
     },
     {
       "id": "scala-start",
@@ -1117,7 +1121,8 @@
       "notes": "Unlimited shared hosting with SPanel.",
       "last_updated": "2026-03-31",
       "price_renewal_monthly": 14.95,
-      "price_renewal_yearly": 179.4
+      "price_renewal_yearly": 179.4,
+      "intro_duration_months": 12
     },
     {
       "id": "scala-managed-vps",
@@ -1262,7 +1267,8 @@
       "notes": "LiteSpeed-powered with excellent uptime track record.",
       "last_updated": "2026-03-31",
       "price_renewal_monthly": 11.95,
-      "price_renewal_yearly": 143.4
+      "price_renewal_yearly": 143.4,
+      "intro_duration_months": 12
     },
     {
       "id": "chemicloud-pro",
@@ -1293,7 +1299,8 @@
       "notes": "Unlimited NVMe shared hosting with LiteSpeed.",
       "last_updated": "2026-03-31",
       "price_renewal_monthly": 17.95,
-      "price_renewal_yearly": 215.4
+      "price_renewal_yearly": 215.4,
+      "intro_duration_months": 12
     },
     {
       "id": "chemicloud-turbo",
@@ -1325,7 +1332,8 @@
       "notes": "Turbo-charged NVMe with 3x resource allocation.",
       "last_updated": "2026-03-31",
       "price_renewal_monthly": 21.95,
-      "price_renewal_yearly": 263.4
+      "price_renewal_yearly": 263.4,
+      "intro_duration_months": 12
     },
     {
       "id": "kamatera-1gb",
@@ -1558,7 +1566,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Premium reseller with staging, white-label tools, and priority support.",
-      "last_updated": "2026-03-31"
+      "last_updated": "2026-03-31",
+      "intro_duration_months": 12
     },
     {
       "id": "siteground-reseller-gogeek",
@@ -1593,7 +1602,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Top-tier reseller with Git, 100GB storage, and priority resources.",
-      "last_updated": "2026-03-31"
+      "last_updated": "2026-03-31",
+      "intro_duration_months": 12
     },
     {
       "id": "hostgator-reseller-aluminum",
@@ -1879,7 +1889,8 @@
       "affiliate_url": "",
       "recommended": true,
       "notes": "Cloud-based reseller with SPanel — no cPanel license fees.",
-      "last_updated": "2026-03-31"
+      "last_updated": "2026-03-31",
+      "intro_duration_months": 12
     },
     {
       "id": "scala-reseller-build1",
@@ -1910,7 +1921,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Customizable cloud reseller with NVMe storage.",
-      "last_updated": "2026-03-31"
+      "last_updated": "2026-03-31",
+      "intro_duration_months": 12
     },
     {
       "id": "hostwinds-reseller-basic",
@@ -1998,7 +2010,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "LiteSpeed-powered reseller with 40 cPanel accounts.",
-      "last_updated": "2026-03-31"
+      "last_updated": "2026-03-31",
+      "intro_duration_months": 12
     },
     {
       "id": "chemicloud-reseller-grow",
@@ -2030,7 +2043,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Mid-tier ChemiCloud reseller with 60 cPanel accounts.",
-      "last_updated": "2026-03-31"
+      "last_updated": "2026-03-31",
+      "intro_duration_months": 12
     },
     {
       "id": "fastcomet-reseller-1",
@@ -2257,7 +2271,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Budget-friendly European host with US data centers.",
-      "last_updated": "2026-03-28"
+      "last_updated": "2026-03-28",
+      "intro_duration_months": 12
     },
     {
       "id": "ionos-plus",
@@ -2288,7 +2303,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Unlimited sites with on-demand backups.",
-      "last_updated": "2026-03-28"
+      "last_updated": "2026-03-28",
+      "intro_duration_months": 12
     },
     {
       "id": "ionos-ultimate",
@@ -2320,7 +2336,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Top-tier IONOS shared with staging and priority support.",
-      "last_updated": "2026-03-28"
+      "last_updated": "2026-03-28",
+      "intro_duration_months": 12
     },
     {
       "id": "godaddy-economy",
@@ -2350,7 +2367,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "World's largest domain registrar and host.",
-      "last_updated": "2026-03-28"
+      "last_updated": "2026-03-28",
+      "intro_duration_months": 12
     },
     {
       "id": "godaddy-deluxe",
@@ -2381,7 +2399,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Unlimited sites on GoDaddy's shared platform.",
-      "last_updated": "2026-03-28"
+      "last_updated": "2026-03-28",
+      "intro_duration_months": 12
     },
     {
       "id": "godaddy-ultimate",
@@ -2413,7 +2432,8 @@
       "affiliate_url": "",
       "recommended": false,
       "notes": "Unlimited storage with 2x processing power.",
-      "last_updated": "2026-03-28"
+      "last_updated": "2026-03-28",
+      "intro_duration_months": 12
     }
   ]
 }

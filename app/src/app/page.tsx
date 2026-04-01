@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import hostingData from "@/data/hosting-data.json";
 import { Sidebar } from "@/components/sidebar";
 import { SummaryCards } from "@/components/summary-cards";
@@ -15,10 +15,9 @@ import type {
   SortField,
   SortDirection,
 } from "@/lib/types";
+import { calculateYearlyCosts } from "@/lib/types";
 
 const data = hostingData as HostingData;
-const AVAILABLE_YEARS = (data._meta.available_years as number[]) || [2023, 2024, 2025, 2026];
-const LATEST_YEAR = Math.max(...AVAILABLE_YEARS);
 
 function parseStorageGB(storage: string): number {
   if (!storage) return 0;
@@ -66,21 +65,6 @@ export default function Dashboard() {
   const [sortField, setSortField] = useState<SortField>("rank");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedYears, setSelectedYears] = useState<number[]>([LATEST_YEAR]);
-
-  const handleToggleYear = useCallback((year: number) => {
-    setSelectedYears((prev) => {
-      if (prev.includes(year)) {
-        // Don't allow deselecting the last year
-        if (prev.length === 1) return prev;
-        return prev.filter((y) => y !== year);
-      }
-      return [...prev, year].sort();
-    });
-  }, []);
-
-  // The primary year for sorting/filtering = the last (most recent) selected year
-  const primaryYear = useMemo(() => Math.max(...selectedYears), [selectedYears]);
 
   const groups = useMemo(() => {
     let providers = [...data.providers] as HostingProvider[];
@@ -111,9 +95,8 @@ export default function Dashboard() {
           cmp = a.bestRank - b.bestRank;
           break;
         case "price": {
-          const ys = String(primaryYear);
-          const aP = billingCycle === "monthly" ? (ap.price_history?.[ys]?.monthly ?? ap.price_monthly) : (ap.price_history?.[ys]?.yearly ?? ap.price_yearly);
-          const bP = billingCycle === "monthly" ? (bp.price_history?.[ys]?.monthly ?? bp.price_monthly) : (bp.price_history?.[ys]?.yearly ?? bp.price_yearly);
+          const aP = billingCycle === "monthly" ? ap.price_monthly : ap.price_yearly;
+          const bP = billingCycle === "monthly" ? bp.price_monthly : bp.price_yearly;
           cmp = aP - bP;
           break;
         }
@@ -134,30 +117,31 @@ export default function Dashboard() {
     });
 
     return grouped;
-  }, [search, typeFilter, billingCycle, sortField, sortDirection, primaryYear]);
+  }, [search, typeFilter, billingCycle, sortField, sortDirection]);
 
   function handleSort(field: SortField) {
     if (field === sortField) {
       setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortField(field);
-      setSortDirection(field === "price" ? "asc" : "desc");
+      setSortDirection(field === "valueScore" || field === "storage" || field === "accounts" ? "desc" : "asc");
     }
   }
 
   function handleExportCSV() {
-    const sortedYears = [...selectedYears].sort();
-    const yearHeaders = sortedYears.flatMap((y) => [`${y} Monthly ($)`, `${y} Yearly ($)`]);
-    const headers = ["Provider", "Plan", "Type", ...yearHeaders, "Storage", "Accounts", "Uptime SLA", "Value Score", "Badges", "URL"];
+    const projYears = [2026, 2027, 2028, 2029];
+    const yearHeaders = projYears.map((y) => `${y} Total ($)`);
+    const headers = ["Provider", "Plan", "Type", "Intro Price ($/mo)", "Renewal Price ($/mo)", ...yearHeaders, "Total 4yr ($)", "Avg Monthly ($)", "Storage", "Accounts", "Uptime SLA", "Value Score", "Badges", "URL"];
     const rows: string[] = [];
     for (const g of groups) {
       for (const p of g.plans) {
-        const yearPrices = sortedYears.flatMap((y) => {
-          const yp = p.price_history?.[String(y)];
-          return [yp?.monthly ?? p.price_monthly, yp?.yearly ?? p.price_yearly];
-        });
+        const costs = calculateYearlyCosts(p);
+        const yearCosts = projYears.map((y) => costs[y]);
+        const total4yr = yearCosts.reduce((s, c) => s + c, 0);
+        const avgMonthly = (total4yr / 48).toFixed(2);
         rows.push([
-          p.name, p.plan, p.type, ...yearPrices,
+          p.name, p.plan, p.type, p.price_monthly, p.price_renewal_monthly || p.price_monthly,
+          ...yearCosts, total4yr.toFixed(2), avgMonthly,
           p.storage, p.accounts, `${p.uptime_guarantee}%`,
           p.valueScore, p.badges.join("; "), p.url
         ].join(","));
@@ -168,14 +152,10 @@ export default function Dashboard() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `hosting-comparison-${sortedYears.join("-vs-")}-${typeFilter === "all" ? "all" : typeFilter.toLowerCase()}.csv`;
+    a.download = `hosting-comparison-4yr-${typeFilter === "all" ? "all" : typeFilter.toLowerCase()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
-
-  const yearLabel = selectedYears.length === 1
-    ? String(selectedYears[0])
-    : `${Math.min(...selectedYears)}-${Math.max(...selectedYears)}`;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -217,9 +197,6 @@ export default function Dashboard() {
             onSearchChange={setSearch}
             billingCycle={billingCycle}
             onBillingCycleChange={setBillingCycle}
-            selectedYears={selectedYears}
-            onToggleYear={handleToggleYear}
-            availableYears={AVAILABLE_YEARS}
             onExportCSV={handleExportCSV}
             totalResults={groups.length}
             activeFilter={typeFilter}
@@ -228,7 +205,6 @@ export default function Dashboard() {
           <HostingTable
             groups={groups}
             billingCycle={billingCycle}
-            selectedYears={selectedYears}
             sortField={sortField}
             sortDirection={sortDirection}
             onSort={handleSort}
@@ -237,7 +213,7 @@ export default function Dashboard() {
           <footer className="text-center py-6 text-[11px] text-muted-foreground/60 border-t border-border/50">
             <p>Hosting Decision Engine -- Data-driven hosting comparisons.</p>
             <p className="mt-1">
-              Viewing prices for {yearLabel}. Last verified {new Date(data._meta.processed_at as string).toLocaleDateString()}. Prices may vary by region.
+              Projected costs 2026-2029. Last verified {new Date(data._meta.processed_at as string).toLocaleDateString()}. Prices may vary by region.
             </p>
           </footer>
         </div>

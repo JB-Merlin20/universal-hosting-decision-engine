@@ -23,6 +23,7 @@ export interface HostingProvider {
   price_yearly: number;
   price_renewal_monthly?: number;
   price_renewal_yearly?: number;
+  intro_duration_months?: number;
   currency: string;
   storage: string;
   bandwidth: string;
@@ -88,3 +89,50 @@ export type SortField =
   | "storage"
   | "accounts";
 export type SortDirection = "asc" | "desc";
+
+export interface YearlyCosts {
+  /** Total annual cost for each year (2026-2029) */
+  [year: number]: number;
+}
+
+/**
+ * Calculate total annual costs for a plan over 4 years (2026-2029).
+ *
+ * Logic:
+ * - During intro period: use intro (current) price × 12
+ * - After intro period: use renewal price × 12 (or intro price if no renewal)
+ * - For yearly billing: use price_yearly during intro, price_renewal_yearly after
+ * - Handles partial intro years (e.g. intro ends mid-year)
+ */
+export function calculateYearlyCosts(plan: HostingProvider): YearlyCosts {
+  const introYearly = plan.price_yearly ?? plan.price_monthly * 12;
+  const renewalMonthly = plan.price_renewal_monthly ?? plan.price_monthly;
+  const renewalYearly = plan.price_renewal_yearly ?? renewalMonthly * 12;
+  const introDuration = plan.intro_duration_months ?? 12;
+
+  // Per-month rates derived from yearly prices for consistency
+  const introPerMonth = introYearly / 12;
+  const renewalPerMonth = renewalYearly / 12;
+
+  const costs: YearlyCosts = {};
+
+  for (let i = 0; i < 4; i++) {
+    const year = 2026 + i;
+    const monthStart = i * 12; // month 0 = start of 2026
+
+    if (monthStart >= introDuration) {
+      // Entire year is at renewal price
+      costs[year] = Math.round(renewalYearly * 100) / 100;
+    } else if (monthStart + 12 <= introDuration) {
+      // Entire year is at intro price
+      costs[year] = Math.round(introYearly * 100) / 100;
+    } else {
+      // Partial: some months intro, some renewal (use per-month from yearly rates)
+      const introMonths = introDuration - monthStart;
+      const renewalMonths = 12 - introMonths;
+      costs[year] = Math.round((introPerMonth * introMonths + renewalPerMonth * renewalMonths) * 100) / 100;
+    }
+  }
+
+  return costs;
+}
